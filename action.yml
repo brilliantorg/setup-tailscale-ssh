@@ -1,0 +1,42 @@
+name: 'Setup Tailscale ssh'
+description: 'Setup Tailscale ssh'
+inputs:
+  ts-api-client-id:
+    description: 'Tailscale API client ID'
+    required: true
+  ts-api-client-secret:
+    description: 'Tailscale API client secret'
+    required: true
+  ssh-private-key:
+    description: 'ssh private key'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: setup ssh key
+      run: |
+        mkdir -p ~/.ssh/
+        echo "Host brilliant-* analytics-* dev-* qa-*" >> ~/.ssh/config
+        echo "    StrictHostKeyChecking no" >> ~/.ssh/config
+        echo "    Port 55422" >> ~/.ssh/config
+        echo "    User deployer" >> ~/.ssh/config
+        echo "${{ inputs.ssh-private-key }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.20.2'
+
+    - name: generate tailscale auth token
+      id: tsauth
+      run: |
+        TS_AUTHKEY=$(go run tailscale.com/cmd/get-authkey@main -ephemeral -tags tag:server)
+        echo TS_AUTHKEY=$TS_AUTHKEY >> $GITHUB_OUTPUT
+      env:
+        TS_API_CLIENT_ID: ${{ inputs.ts-api-client-id }}
+        TS_API_CLIENT_SECRET: ${{ inputs.ts-api-client-secret }}
+
+    - name: setup tailscale
+      uses: tailscale/github-action@v1
+      with:
+        authkey: ${{ steps.tsauth.outputs.TS_AUTHKEY }}
